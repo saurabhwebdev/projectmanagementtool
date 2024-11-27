@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon, CalendarIcon, UserIcon, FlagIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, CalendarIcon, UserIcon, FlagIcon, LinkIcon } from '@heroicons/react/24/outline';
 import { collection, addDoc, getDocs, query, where, serverTimestamp, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -11,6 +11,8 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [availableTasks, setAvailableTasks] = useState([]);
+  const [showDependencySelect, setShowDependencySelect] = useState(false);
   
   const formatDate = (date) => {
     if (!date) return '';
@@ -35,7 +37,11 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
     assignedTo: '',
     dueDate: '',
     priority: 'MEDIUM',
-    status: 'TODO'
+    status: 'TODO',
+    dependencies: [],
+    storyPoints: 0,
+    sprintId: '',
+    completedAt: null
   });
 
   useEffect(() => {
@@ -47,7 +53,11 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
         assignedTo: editingTask.assignedTo || '',
         dueDate: formatDate(editingTask.dueDate),
         priority: editingTask.priority || 'MEDIUM',
-        status: editingTask.status || 'TODO'
+        status: editingTask.status || 'TODO',
+        dependencies: editingTask.dependencies || [],
+        storyPoints: editingTask.storyPoints || 0,
+        sprintId: editingTask.sprintId || '',
+        completedAt: editingTask.completedAt || null
       });
     }
   }, [editingTask]);
@@ -56,6 +66,12 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
     fetchProjects();
     fetchUsers();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (formData.projectId) {
+      fetchAvailableTasks();
+    }
+  }, [formData.projectId]);
 
   const fetchProjects = async () => {
     try {
@@ -74,6 +90,28 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
       setProjects(projectsData);
     } catch (error) {
       console.error('Error fetching projects:', error);
+    }
+  };
+
+  const fetchAvailableTasks = async () => {
+    if (!formData.projectId) return;
+    
+    try {
+      const tasksRef = collection(db, 'tasks');
+      const q = query(tasksRef, where('projectId', '==', formData.projectId));
+      if (editingTask) {
+        q = query(q, where('__name__', '!=', editingTask.id));
+      }
+      
+      const taskSnap = await getDocs(q);
+      const tasks = taskSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      setAvailableTasks(tasks);
+    } catch (error) {
+      console.error('Error fetching available tasks:', error);
     }
   };
 
@@ -98,6 +136,15 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
     }));
   };
 
+  const toggleDependency = (taskId) => {
+    setFormData(prev => ({
+      ...prev,
+      dependencies: prev.dependencies.includes(taskId)
+        ? prev.dependencies.filter(id => id !== taskId)
+        : [...prev.dependencies, taskId]
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -106,41 +153,29 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
     try {
       const taskData = {
         ...formData,
-        updatedAt: serverTimestamp(),
-        dueDate: formData.dueDate ? new Date(formData.dueDate) : null
+        createdBy: currentUser.uid,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       };
 
       if (editingTask) {
-        // Update existing task
-        await updateDoc(doc(db, 'tasks', editingTask.id), taskData);
+        const taskRef = doc(db, 'tasks', editingTask.id);
+        await updateDoc(taskRef, {
+          ...taskData,
+          createdAt: editingTask.createdAt,
+          createdBy: editingTask.createdBy
+        });
       } else {
-        // Create new task
-        taskData.createdBy = currentUser.uid;
-        taskData.createdAt = serverTimestamp();
         await addDoc(collection(db, 'tasks'), taskData);
       }
 
-      // Pass the task data to parent for progress update
-      onTaskCreated?.(taskData);
+      onTaskCreated();
       onClose();
-    } catch (err) {
-      setError(editingTask ? 'Failed to update task' : 'Failed to create task');
-      console.error('Error saving task:', err);
+    } catch (error) {
+      console.error('Error saving task:', error);
+      setError('Failed to save task. Please try again.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'HIGH':
-        return 'text-red-600 bg-red-50';
-      case 'MEDIUM':
-        return 'text-yellow-600 bg-yellow-50';
-      case 'LOW':
-        return 'text-green-600 bg-green-50';
-      default:
-        return 'text-gray-600 bg-gray-50';
     }
   };
 
@@ -280,6 +315,80 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
           </div>
         )}
 
+        {/* Story Points Input */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Story Points</label>
+          <select
+            name="storyPoints"
+            value={formData.storyPoints}
+            onChange={handleInputChange}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="0">Select Points</option>
+            <option value="1">1 (Very Small)</option>
+            <option value="2">2 (Small)</option>
+            <option value="3">3 (Medium)</option>
+            <option value="5">5 (Large)</option>
+            <option value="8">8 (Very Large)</option>
+            <option value="13">13 (Extra Large)</option>
+          </select>
+        </div>
+
+        {/* Sprint Selection */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Sprint</label>
+          <select
+            name="sprintId"
+            value={formData.sprintId}
+            onChange={handleInputChange}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="">Select Sprint</option>
+            {/* We'll need to implement sprint options fetching */}
+          </select>
+        </div>
+
+        {/* Dependencies Section */}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-xs font-medium text-gray-500">Dependencies</label>
+            <button
+              type="button"
+              onClick={() => setShowDependencySelect(!showDependencySelect)}
+              className="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+            >
+              <LinkIcon className="w-4 h-4" />
+              {showDependencySelect ? 'Hide Dependencies' : 'Add Dependencies'}
+            </button>
+          </div>
+          
+          {showDependencySelect && (
+            <div className="mt-2 border rounded-md p-4 space-y-2 max-h-60 overflow-y-auto">
+              {availableTasks.length > 0 ? (
+                availableTasks.map(task => (
+                  <label
+                    key={task.id}
+                    className="flex items-start space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.dependencies.includes(task.id)}
+                      onChange={() => toggleDependency(task.id)}
+                      className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <div>
+                      <p className="font-medium text-sm">{task.title}</p>
+                      <p className="text-xs text-gray-500">{task.description}</p>
+                    </div>
+                  </label>
+                ))
+              ) : (
+                <p className="text-gray-500 text-sm">No tasks available for dependencies</p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Action Buttons */}
         <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
           <button
@@ -312,4 +421,17 @@ const CreateTaskForm = ({ onClose, onTaskCreated, initialProjectId, editingTask 
   );
 };
 
-export default CreateTaskForm; 
+const getPriorityColor = (priority) => {
+  switch (priority) {
+    case 'HIGH':
+      return 'text-red-600 bg-red-50';
+    case 'MEDIUM':
+      return 'text-yellow-600 bg-yellow-50';
+    case 'LOW':
+      return 'text-green-600 bg-green-50';
+    default:
+      return 'text-gray-600 bg-gray-50';
+  }
+};
+
+export default CreateTaskForm;

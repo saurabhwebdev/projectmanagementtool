@@ -17,6 +17,7 @@ import ProjectMembers from './pages/ProjectMembers';
 import { ProtectedRoute } from './components/routing/ProtectedRoute';
 import ManageMembers from './components/projects/ManageMembers';
 import Layout from './components/layout/Layout';
+import AppRoutes from './components/routing/AppRoutes';
 
 // Create a wrapper component for ProjectSettings route
 function ProjectSettingsWrapper() {
@@ -57,77 +58,9 @@ function AppContent() {
   }
 
   return (
-    <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
-      <Route path="/unauthorized" element={<Unauthorized />} />
-
-      {/* Protected routes with role-based access */}
-      <Route
-        path="/"
-        element={
-          <RoleBasedRoute allowedRoles={['admin', 'project_manager', 'developer', 'stakeholder']}>
-            <Layout>
-              <Dashboard />
-            </Layout>
-          </RoleBasedRoute>
-        }
-      />
-
-      <Route
-        path="/projects"
-        element={
-          <RoleBasedRoute allowedRoles={['admin', 'project_manager', 'developer']}>
-            <Layout>
-              <Projects />
-            </Layout>
-          </RoleBasedRoute>
-        }
-      />
-
-      <Route
-        path="/tasks"
-        element={
-          <RoleBasedRoute allowedRoles={['admin', 'project_manager', 'developer']}>
-            <Layout>
-              <Tasks />
-            </Layout>
-          </RoleBasedRoute>
-        }
-      />
-
-      <Route
-        path="/settings"
-        element={
-          <RoleBasedRoute allowedRoles={['admin']}>
-            <Layout>
-              <Settings />
-            </Layout>
-          </RoleBasedRoute>
-        }
-      />
-
-      <Route
-        path="/projects/:projectId/settings"
-        element={
-          <ProjectRoleRoute 
-            allowedRoles={['owner', 'project_manager']} 
-            component={ProjectSettings}
-          />
-        }
-      />
-
-      <Route
-        path="/projects/:projectId/members"
-        element={
-          <ProjectRoleRoute 
-            allowedRoles={['owner', 'manager']} 
-            component={ProjectMembers}
-          />
-        }
-      />
-    </Routes>
+    <Layout>
+      <AppRoutes />
+    </Layout>
   );
 }
 

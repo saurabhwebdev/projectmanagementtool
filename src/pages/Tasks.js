@@ -28,6 +28,7 @@ import { notifyTaskAssignment } from '../utils/notifications';
 import { usePermissions } from '../hooks/usePermissions';
 import { useParams } from 'react-router-dom';
 import CreateTaskForm from '../components/tasks/CreateTaskForm';
+import TaskDependencies from '../components/tasks/TaskDependencies';
 
 const TaskPriority = {
   LOW: { label: 'Low', color: 'bg-gray-100 text-gray-800' },
@@ -55,10 +56,13 @@ const TaskStatus = {
 
 const Tasks = () => {
   const { currentUser } = useAuth();
+  const { projectId } = useParams();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [showDependenciesModal, setShowDependenciesModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -79,8 +83,6 @@ const Tasks = () => {
     setSelectedProjectId(projectId);
     setShowCreateModal(true);
   };
-
-  const { projectId } = useParams();
 
   useEffect(() => {
     if (projectId) {
@@ -338,9 +340,20 @@ const Tasks = () => {
         </div>
 
         <div className="flex justify-between items-center">
-          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${TaskStatus[task.status].color}`}>
-            <StatusIcon className="w-4 h-4" />
-            <span>{TaskStatus[task.status].label}</span>
+          <div className="flex items-center gap-4">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${TaskStatus[task.status].color}`}>
+              <StatusIcon className="w-4 h-4" />
+              <span>{TaskStatus[task.status].label}</span>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedTask(task);
+                setShowDependenciesModal(true);
+              }}
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              Dependencies
+            </button>
           </div>
           
           {canUpdateTask && task.status !== 'COMPLETED' && (
@@ -422,6 +435,28 @@ const Tasks = () => {
                 editingTask={editingTask}
               />
             </motion.div>
+          </div>
+        </div>
+      )}
+
+      {/* Dependencies Modal */}
+      {showDependenciesModal && selectedTask && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Manage Dependencies</h2>
+              <button
+                onClick={() => setShowDependenciesModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                ×
+              </button>
+            </div>
+            <TaskDependencies
+              projectId={projectId}
+              taskId={selectedTask.id}
+              currentDependencies={selectedTask.dependencies || []}
+            />
           </div>
         </div>
       )}
