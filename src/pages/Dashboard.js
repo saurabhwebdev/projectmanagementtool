@@ -79,10 +79,14 @@ const Dashboard = () => {
           where('assignedTo', '==', currentUser.uid)
         );
         const tasksSnapshot = await getDocs(tasksQuery);
-        const tasks = tasksSnapshot.docs.map(doc => ({ 
-          id: doc.id, 
-          ...doc.data() 
-        }));
+        const tasks = tasksSnapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            dueDate: data.dueDate?.toDate ? data.dueDate : null
+          };
+        });
         
         const completedTasks = tasks.filter(task => task.status === 'completed').length;
         
@@ -90,8 +94,8 @@ const Dashboard = () => {
         const nextWeek = new Date();
         nextWeek.setDate(nextWeek.getDate() + 7);
         const upcomingDeadlines = tasks.filter(task => {
-          const dueDate = task.dueDate?.toDate();
-          return dueDate && dueDate <= nextWeek && task.status !== 'completed';
+          if (!task.dueDate) return false;
+          return task.dueDate <= nextWeek && task.status !== 'completed';
         }).length;
 
         // Calculate total progress
